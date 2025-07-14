@@ -304,6 +304,40 @@ async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: as
                     if turn_detection:
                         turn_detection.update_settings(speed_factor)
                         logger.info(f"🖥️⚙️ Updated turn detection settings to factor: {speed_factor:.2f}")
+                elif msg_type == "text_user_request":
+                    # Handle text input from user
+                    text = data.get("text", "").strip()
+                    if text:
+                        logger.info(f"🖥️💬 Received text input from user: {text}")
+                        
+                        # Interrupt any ongoing generation
+                        if app.state.SpeechPipelineManager.running_generation:
+                            app.state.SpeechPipelineManager.running_generation.abortion_started = True
+                        
+                        # Interrupt microphone if active
+                        if not app.state.AudioInputProcessor.interrupted:
+                            logger.info(f"{Colors.apply('🖥️🎙️ ⏸️ Microphone interrupted (text input)').cyan}")
+                            app.state.AudioInputProcessor.interrupted = True
+                            callbacks.interruption_time = time.time()
+                            
+                        # Send final_user_request to client for UI consistency
+                        callbacks.message_queue.put_nowait({
+                            "type": "final_user_request",
+                            "content": text
+                        })
+                        
+                        # Add to history
+                        app.state.SpeechPipelineManager.history.append({
+                            "role": "user",
+                            "content": text
+                        })
+                        
+                        # Trigger LLM generation
+                        app.state.SpeechPipelineManager.prepare_generation(text)
+                        
+                        # Allow TTS synthesis
+                        callbacks.tts_to_client = True
+                        callbacks.synthesis_started = True
 
 
     except asyncio.CancelledError:

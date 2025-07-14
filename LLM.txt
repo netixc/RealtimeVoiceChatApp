@@ -6,7 +6,7 @@ This document describes the complete response flow in the Real-Time Voice Chat a
 ## Directory Structure
 
 ```
-RealtimeVoiceChatTest/
+RealtimeVoiceChatApp/
 ├── .env.example
 ├── .gitattributes
 ├── .gitignore

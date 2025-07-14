@@ -354,5 +354,40 @@ document.getElementById("copyBtn").onclick = () => {
     .catch(err => console.error("Copy failed:", err));
 };
 
+// Text input handlers
+const textInput = document.getElementById("textInput");
+const sendBtn = document.getElementById("sendBtn");
+
+function sendTextMessage() {
+  const text = textInput.value.trim();
+  if (!text) return;
+  
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.error("WebSocket not connected. Please start the voice chat first.");
+    return;
+  }
+  
+  // Clear the input
+  textInput.value = "";
+  
+  // Send the text message via WebSocket
+  socket.send(JSON.stringify({
+    type: 'text_user_request',
+    text: text
+  }));
+  
+  console.log("Sent text message:", text);
+}
+
+sendBtn.onclick = sendTextMessage;
+
+// Send on Enter key
+textInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendTextMessage();
+  }
+});
+
 // First render
 renderMessages();

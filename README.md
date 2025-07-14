@@ -63,7 +63,7 @@ cd RealtimeVoiceChatApp
 ```
 *(If you want to customize models/settings in `src/*.py`, do it **before** this step!)*
 
-edit .env.example && rename to .env
+Copy `.env.example` to `.env` and edit it with your API keys and configuration
 ```bash
 docker compose up --build
 ```
@@ -86,22 +86,22 @@ docker compose build --no-cache
 
 ## Configuration Deep Dive 🔧
 
-Want to tweak the AI's voice, brain, or how it listens? Modify the Python files in the `src/` directory.
+Want to tweak the AI's voice, brain, or how it listens? Configuration is managed through environment variables in the `.env` file (created from `.env.example`).
 
-**⚠️ Important Docker Note:** If using Docker, make any configuration changes *before* running `docker compose build` to ensure they are included in the image.
+**⚠️ Important Docker Note:** If using Docker, make any configuration changes to the `.env` file *before* running `docker compose up`.
 
-*   **TTS Engine & Voice (`server.py`, `audio_module.py`):**
-    *   Change `START_ENGINE` in `server.py` to `"kokoro"` (currently the only supported engine).
-    *   Adjust engine-specific settings (e.g., voice, speed) within `AudioProcessor.__init__` in `audio_module.py`.
-*   **LLM Backend & Model (`server.py`, `llm_module.py`):**
-    *   Set `LLM_START_PROVIDER` (`"openai"`) and `LLM_START_MODEL` (e.g., `"openai/gpt-4o-mini"` for OpenAI) in `server.py`. 
+*   **TTS Engine & Voice:**
+    *   Set `TTS_START_ENGINE` in `.env` to `"kokoro"` (currently the only supported engine).
+    *   For advanced engine-specific settings (e.g., voice, speed), modify `AudioProcessor.__init__` in `audio_module.py`.
+*   **LLM Backend & Model:**
+    *   Set `LLM_START_PROVIDER` (e.g., `"openai"`) and `LLM_START_MODEL` (e.g., `"openai/gpt-4o-mini"`) in `.env`.
     *   Customize the AI's personality by editing `system_prompt.txt`.
 *   **STT Settings (`transcribe.py`):**
     *   Modify `DEFAULT_RECORDER_CONFIG` to change the Whisper model (`model`), language (`language`), silence thresholds (`silence_limit_seconds`), etc. The default `base.en` model is pre-downloaded during the Docker build.
 *   **Turn Detection Sensitivity (`turndetect.py`):**
     *   Adjust pause duration constants within the `TurnDetector.update_settings` method.
-*   **SSL/HTTPS (`server.py`):**
-    *   Set `USE_SSL = True` 
+*   **SSL/HTTPS:**
+    *   Set `USE_SSL=true` in `.env` file 
 
 ---
 
