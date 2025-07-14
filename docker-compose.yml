@@ -1,0 +1,53 @@
+# Remove the version: '3.8' line as per the warning
+services:
+  # Your FastAPI Application Service
+  app:
+    env_file:
+      - ./.env
+    build:
+      context: . # Build context is the current directory
+      dockerfile: Dockerfile
+    image: realtime-voice-chat:latest # Name the image built by 'build:'
+    container_name: realtime-voice-chat-app
+    ports:
+      - "8000:8000"
+      - "443:443"
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_AUDIO_QUEUE_SIZE=${MAX_AUDIO_QUEUE_SIZE:-50}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL}
+      - LLM_PROVIDER=${LLM_PROVIDER}
+      - LLM_MODEL=${LLM_MODEL}
+      - TTS_ENGINE=${TTS_ENGINE}
+      - USE_SSL=${USE_SSL:-false}
+      - SSL_CERT_PATH=${SSL_CERT_PATH:-/app/certs/cert.pem}
+      - SSL_KEY_PATH=${SSL_KEY_PATH:-/app/certs/key.pem}
+      - NVIDIA_VISIBLE_DEVICES=all # For app's PyTorch/DeepSpeed/etc
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HF_HOME=/home/appuser/.cache/huggingface
+      - TORCH_HOME=/home/appuser/.cache/torch
+    volumes:
+       # Optional: Mount src for live development
+       - ./src:/app/src
+       # Mount SSL certificates
+       - ./certs:/app/certs
+       # Mount cache directories
+       - huggingface_cache:/home/appuser/.cache/huggingface
+       - torch_cache:/home/appuser/.cache/torch
+    deploy: # GPU access for the app
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility]
+    restart: unless-stopped
+
+# Define named volumes for persistent data
+volumes:
+  huggingface_cache:
+    driver: local
+  torch_cache:
+    driver: local
