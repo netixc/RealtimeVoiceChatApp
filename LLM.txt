@@ -86,6 +86,12 @@ RealtimeVoiceChatApp/
   3. Triggers callbacks via `on_partial_assistant_text()`
   4. Preprocesses chunks with `preprocess_chunk()` (lines 266-279)
   5. Cleans final answer with `clean_quick_answer()` (lines 281-306)
+- **Intervention Handling:**
+  - Implements Agent Zero's InterventionException pattern
+  - Detects concurrent user requests during generation
+  - Pauses current generation and stores progress
+  - Processes intervention request completely
+  - Resumes original generation after intervention completes
 
 ### 3. Text-to-Speech Conversion
 **Location:** `services/audio/audio_module.py`
@@ -149,6 +155,10 @@ RealtimeVoiceChatApp/
 - **Abort Mechanisms:** Multiple levels for user interruptions
 - **State Management:** `TranscriptionCallbacks` for connection-specific state
 - **Graceful Degradation:** Fallback mechanisms for service failures
+- **Intervention System:** Agent Zero-style pause/resume for concurrent requests
+  - Flag-based detection to work with RealtimeTTS
+  - Maintains conversation history and context
+  - Seamless resume after intervention handling
 
 ## Response Flow Sequence
 
@@ -219,6 +229,36 @@ RealtimeVoiceChatApp/
 - **Environment Config:** All settings configurable via environment variables
 - **Scalability:** Modular design supports horizontal scaling
 
+## Intervention Mechanism
+
+### Overview
+The application implements Agent Zero's intervention pattern, allowing users to interrupt ongoing AI responses with new requests. The system will:
+1. Pause the current generation
+2. Process the intervention request completely
+3. Resume the original generation from where it left off
+
+### Implementation Details
+**Key Components:**
+- `InterventionException`: Custom exception for handling interventions
+- `intervention` property: Stores pending intervention messages
+- `handle_intervention()`: Core method that detects and processes interventions
+- Flag-based detection: Works around RealtimeTTS exception handling
+
+**How It Works:**
+1. User submits new request while AI is responding
+2. New request is queued and sets `intervention` property
+3. Generator detects intervention via flag (avoids RealtimeTTS catching exceptions)
+4. Current generation is paused and progress is saved
+5. Intervention request is processed as new generation
+6. After completion, original request resumes as fresh generation
+
+**Usage Example:**
+- User: "Tell me a long story"
+- AI: *starts generating story*
+- User: "Tell a joke" (interrupts)
+- AI: *pauses story, tells joke*
+- AI: *resumes story after joke completes*
+
 ---
 
-**Last Updated:** Directory restructure completed with improved organization for maintainability and future MCP integration capabilities.
+**Last Updated:** Directory restructure completed with improved organization for maintainability and future MCP integration capabilities. Added Agent Zero intervention mechanism for handling concurrent user requests.

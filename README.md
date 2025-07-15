@@ -23,6 +23,7 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Real-Time Feedback:** See partial transcriptions and AI responses as they happen.
 *   **Low Latency Focus:** Optimized architecture using audio chunk streaming.
 *   **Smart Turn-Taking:** Dynamic silence detection (`turndetect.py`) adapts to the conversation pace.
+*   **Intervention Mechanism:** Interrupt ongoing AI responses with new requests - the system will pause, handle your new request, then resume the original response.
 *   **Visual Voice Activity Indicator:** Multi-state indicator shows exactly what's happening:
     *   🔘 Grey - Inactive/disconnected
     *   ⚪ Silver (pulsing) - Activating microphone
