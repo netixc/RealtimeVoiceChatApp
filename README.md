@@ -24,6 +24,7 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Low Latency Focus:** Optimized architecture using audio chunk streaming.
 *   **Smart Turn-Taking:** Dynamic silence detection (`turndetect.py`) adapts to the conversation pace.
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
+*   **Toggle Controls:** Separate TTS (Text-to-Speech) and STT (Speech-to-Text) toggles for privacy and resource control.
 *   **Dockerized Deployment:** Recommended setup using Docker Compose for easier dependency management.
 
 ## Technology Stack 🛠️
@@ -81,6 +82,8 @@ docker compose build --no-cache
 1.  Open your web browser to `https://localhost:8000` (or your server's IP if running remotely/in Docker on another machine).
 2.  **Grant microphone permissions** when prompted.
 3.  Click **"Start"** to begin chatting! Use "Stop" to end and "Reset" to clear the conversation.
+4.  Use the **speaker icon** to toggle TTS (Text-to-Speech) on/off.
+5.  Use the **microphone icon** to toggle STT (Speech-to-Text) on/off.
 
 ---
 

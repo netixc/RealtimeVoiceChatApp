@@ -31,6 +31,7 @@ let chatHistory = [];
 let typingUser = "";
 let typingAssistant = "";
 let ttsEnabled = true;
+let sttEnabled = true;
 
 // --- batching + fixed 8‑byte header setup ---
 const BATCH_SAMPLES = 2048;
@@ -107,6 +108,7 @@ async function startRawPcmCapture() {
     micWorkletNode = new AudioWorkletNode(audioContext, 'pcm-worklet-processor');
 
     micWorkletNode.port.onmessage = ({ data }) => {
+      if (!sttEnabled) return;
       const incoming = new Int16Array(data);
       let read = 0;
       while (read < incoming.length) {
@@ -412,6 +414,26 @@ ttsToggleBtn.onclick = () => {
     if (ttsWorkletNode) {
       ttsWorkletNode.port.postMessage({ type: "clear" });
     }
+  }
+};
+
+// STT Toggle button handler
+const sttToggleBtn = document.getElementById("sttToggle");
+sttToggleBtn.onclick = () => {
+  sttEnabled = !sttEnabled;
+  
+  // Update button visual state
+  const micDisabledPath = sttToggleBtn.querySelector('.stt-disabled');
+  
+  if (sttEnabled) {
+    micDisabledPath.style.display = 'none';
+    console.log("STT enabled - microphone active");
+  } else {
+    micDisabledPath.style.display = 'block';
+    console.log("STT disabled - microphone muted");
+    
+    // Flush any remaining audio when disabled
+    flushRemainder();
   }
 };
 
