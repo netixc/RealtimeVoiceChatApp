@@ -62,6 +62,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
     }
     .status {
       font-size: 0.9rem;
@@ -235,6 +236,76 @@
     .stt-toggle-btn:disabled {
       background-color: #7f8c8d;
     }
+    .vad-indicator {
+      margin-left: auto;
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      transition: all 0.3s ease;
+    }
+    
+    /* State: inactive (grey) */
+    .vad-indicator.inactive svg {
+      color: #9E9E9E;
+      opacity: 0.5;
+    }
+    
+    /* State: activating (silver pulsing) */
+    .vad-indicator.activating svg {
+      color: #C0C0C0;
+      opacity: 1;
+    }
+    .vad-indicator.activating .vad-dot {
+      animation: pulse 1s ease-in-out infinite;
+    }
+    
+    /* State: listening (red) */
+    .vad-indicator.listening svg {
+      color: #F44336;
+      opacity: 1;
+    }
+    
+    /* State: recording (green) */
+    .vad-indicator.recording svg {
+      color: #4CAF50;
+      opacity: 1;
+    }
+    .vad-indicator.recording .vad-dot {
+      animation: pulse-gentle 2s ease-in-out infinite;
+    }
+    
+    /* State: waiting (teal) */
+    .vad-indicator.waiting svg {
+      color: #009688;
+      opacity: 1;
+    }
+    
+    /* State: processing (dark cyan pulsing) */
+    .vad-indicator.processing svg {
+      color: #006064;
+      opacity: 1;
+    }
+    .vad-indicator.processing .vad-dot {
+      animation: pulse-fast 0.8s ease-in-out infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 0.4; transform: scale(0.8); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.4; transform: scale(0.8); }
+    }
+    
+    @keyframes pulse-gentle {
+      0% { opacity: 0.8; transform: scale(0.95); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.8; transform: scale(0.95); }
+    }
+    
+    @keyframes pulse-fast {
+      0% { opacity: 0.6; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 0.6; transform: scale(0.9); }
+    }
   </style>
 </head>
 <body>
@@ -256,6 +327,12 @@
         </svg>
         Real-Time Voice Chat
         <span class="status" id="status"></span>
+        <div class="vad-indicator inactive" id="vadIndicator">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="4" fill="currentColor" class="vad-dot"/>
+          </svg>
+        </div>
       </div>
       <div class="messages" id="messages"></div>
       <div class="input-bar">

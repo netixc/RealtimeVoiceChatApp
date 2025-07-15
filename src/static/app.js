@@ -18,6 +18,10 @@ const messagesDiv = document.getElementById("messages");
 const speedSlider = document.getElementById("speedSlider");
 speedSlider.disabled = true;  // start disabled
 
+
+// VAD indicator element
+const vadIndicator = document.getElementById("vadIndicator");
+
 let socket = null;
 let audioContext = null;
 let mediaStream = null;
@@ -210,10 +214,15 @@ function renderMessages() {
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
 }
 
-function handleJSONMessage({ type, content }) {
+function handleJSONMessage(msg) {
+  const { type, content, level, is_speaking } = msg;
   if (type === "partial_user_request") {
     typingUser = content?.trim() ? escapeHtml(content) : "";
     renderMessages();
+    // User is speaking, ensure we're in recording state
+    if (content?.trim()) {
+      setVADState('recording');
+    }
     return;
   }
   if (type === "final_user_request") {
@@ -222,11 +231,17 @@ function handleJSONMessage({ type, content }) {
     }
     typingUser = "";
     renderMessages();
+    // User finished speaking, move to processing
+    setVADState('processing');
     return;
   }
   if (type === "partial_assistant_answer") {
     typingAssistant = content?.trim() ? escapeHtml(content) : "";
     renderMessages();
+    // Assistant is responding, back to listening
+    if (vadState === 'processing') {
+      setVADState('listening');
+    }
     return;
   }
   if (type === "final_assistant_answer") {
@@ -235,6 +250,8 @@ function handleJSONMessage({ type, content }) {
     }
     typingAssistant = "";
     renderMessages();
+    // Assistant finished, ensure we're listening
+    setVADState('listening');
     return;
   }
   if (type === "tts_chunk") {
@@ -261,6 +278,10 @@ function handleJSONMessage({ type, content }) {
     ignoreIncomingTTS = true;
     console.log("TTS playback stopped. Reason: tts_interruption.");
     socket.send(JSON.stringify({ type: 'tts_stop' }));
+    return;
+  }
+  if (type === "vad_state") {
+    updateVADIndicator(is_speaking);
     return;
   }
 }
@@ -301,6 +322,7 @@ document.getElementById("startBtn").onclick = async () => {
     return;
   }
   statusDiv.textContent = "Initializing connection...";
+  setVADState('activating');
 
   const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   socket = new WebSocket(`${wsProto}//${location.host}/ws`);
@@ -309,7 +331,8 @@ document.getElementById("startBtn").onclick = async () => {
     statusDiv.textContent = "Connected. Activating mic and TTS…";
     await startRawPcmCapture();
     await setupTTSPlayback();
-    speedSlider.disabled = false; 
+    speedSlider.disabled = false;
+    setVADState('listening');
   };
 
   socket.onmessage = (evt) => {
@@ -328,6 +351,7 @@ document.getElementById("startBtn").onclick = async () => {
     flushRemainder();
     cleanupAudio();
     speedSlider.disabled = true;
+    setVADState('inactive');
   };
 
   socket.onerror = (err) => {
@@ -345,6 +369,7 @@ document.getElementById("stopBtn").onclick = () => {
   }
   cleanupAudio();
   statusDiv.textContent = "Stopped.";
+  setVADState('inactive');
 };
 
 document.getElementById("copyBtn").onclick = () => {
@@ -439,3 +464,38 @@ sttToggleBtn.onclick = () => {
 
 // First render
 renderMessages();
+
+
+// VAD indicator states
+let vadState = 'inactive';
+let vadStateTimer = null;
+
+// VAD indicator function
+function setVADState(state) {
+  // Remove all state classes
+  vadIndicator.classList.remove('inactive', 'activating', 'listening', 'recording', 'waiting', 'processing');
+  
+  // Add the new state class
+  vadIndicator.classList.add(state);
+  vadState = state;
+  
+  // Clear any existing timer
+  if (vadStateTimer) {
+    clearTimeout(vadStateTimer);
+    vadStateTimer = null;
+  }
+}
+
+// Legacy function for VAD state updates
+function updateVADIndicator(isSpeaking) {
+  if (isSpeaking) {
+    setVADState('recording');
+  } else {
+    // When speech stops, go to waiting state briefly
+    setVADState('waiting');
+    vadStateTimer = setTimeout(() => {
+      setVADState('listening');
+    }, 1000);
+  }
+}
+

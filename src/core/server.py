@@ -281,6 +281,8 @@ async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: as
             elif "text" in msg and msg["text"]:
                 # Text-based message: parse JSON
                 data = parse_json_message(msg["text"])
+                if not data:
+                    continue
                 msg_type = data.get("type")
                 logger.info(Colors.apply(f"🖥️📥 ←←Client: {data}").orange)
 
@@ -589,7 +591,6 @@ class TranscriptionCallbacks:
         self.abort_worker_thread = threading.Thread(target=self._abort_worker, name="AbortWorker", daemon=True)
         self.abort_worker_thread.start()
 
-
     def reset_state(self):
         """Resets connection-specific state flags and variables to their initial values."""
         # Reset all connection-specific state flags
@@ -767,13 +768,19 @@ class TranscriptionCallbacks:
         """
         Callback invoked when the silence detection state changes.
 
-        Updates the internal silence_active flag.
+        Updates the internal silence_active flag and sends VAD state to client.
 
         Args:
             silence_active: True if silence is currently detected, False otherwise.
         """
         # logger.debug(f"🖥️🎙️ Silence active: {silence_active}") # Optional: Can be noisy
         self.silence_active = silence_active
+        
+        # Send VAD state to client
+        self.message_queue.put_nowait({
+            "type": "vad_state",
+            "is_speaking": bool(not silence_active)
+        })
 
     def on_partial_assistant_text(self, txt: str):
         """
