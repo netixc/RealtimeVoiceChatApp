@@ -30,6 +30,7 @@ let ignoreIncomingTTS = false;
 let chatHistory = [];
 let typingUser = "";
 let typingAssistant = "";
+let ttsEnabled = true;
 
 // --- batching + fixed 8‑byte header setup ---
 const BATCH_SAMPLES = 2048;
@@ -235,7 +236,7 @@ function handleJSONMessage({ type, content }) {
     return;
   }
   if (type === "tts_chunk") {
-    if (ignoreIncomingTTS) return;
+    if (ignoreIncomingTTS || !ttsEnabled) return;
     const int16Data = base64ToInt16Array(content);
     if (ttsWorkletNode) {
       ttsWorkletNode.port.postMessage(int16Data);
@@ -388,6 +389,31 @@ textInput.addEventListener("keypress", (e) => {
     sendTextMessage();
   }
 });
+
+// TTS Toggle button handler
+const ttsToggleBtn = document.getElementById("ttsToggle");
+ttsToggleBtn.onclick = () => {
+  ttsEnabled = !ttsEnabled;
+  
+  // Update button visual state
+  const enabledPath = ttsToggleBtn.querySelector('.tts-enabled');
+  const disabledPath = ttsToggleBtn.querySelector('.tts-disabled');
+  
+  if (ttsEnabled) {
+    enabledPath.style.display = 'block';
+    disabledPath.style.display = 'none';
+    console.log("TTS enabled");
+  } else {
+    enabledPath.style.display = 'none';
+    disabledPath.style.display = 'block';
+    console.log("TTS disabled");
+    
+    // Clear any playing TTS when disabled
+    if (ttsWorkletNode) {
+      ttsWorkletNode.port.postMessage({ type: "clear" });
+    }
+  }
+};
 
 // First render
 renderMessages();
