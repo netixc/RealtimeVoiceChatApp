@@ -124,6 +124,13 @@ RealtimeVoiceChatApp/
   - Receives base64 audio chunks
   - Converts via `base64ToInt16Array()` (lines 82-90)
   - Plays through TTS worklet processor
+- **Voice Activity Indicator:** Multi-state visual feedback system
+  - Grey: Inactive/disconnected
+  - Silver (pulsing): Activating microphone
+  - Red: Listening for speech
+  - Green: Recording user voice
+  - Teal: Processing speech end
+  - Dark Cyan (pulsing): AI processing response
 
 ## Key Integration Points
 

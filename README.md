@@ -23,6 +23,13 @@ A sophisticated client-server system built for low-latency interaction:
 *   **Real-Time Feedback:** See partial transcriptions and AI responses as they happen.
 *   **Low Latency Focus:** Optimized architecture using audio chunk streaming.
 *   **Smart Turn-Taking:** Dynamic silence detection (`turndetect.py`) adapts to the conversation pace.
+*   **Visual Voice Activity Indicator:** Multi-state indicator shows exactly what's happening:
+    *   🔘 Grey - Inactive/disconnected
+    *   ⚪ Silver (pulsing) - Activating microphone
+    *   🔴 Red - Listening for speech
+    *   🟢 Green - Recording your voice
+    *   🟦 Teal - Processing speech end
+    *   🔵 Dark Cyan (pulsing) - AI processing response
 *   **Web Interface:** Clean and simple UI using Vanilla JS and the Web Audio API.
 *   **Toggle Controls:** Separate TTS (Text-to-Speech) and STT (Speech-to-Text) toggles for privacy and resource control.
 *   **Dockerized Deployment:** Recommended setup using Docker Compose for easier dependency management.
@@ -81,9 +88,10 @@ docker compose build --no-cache
 
 1.  Open your web browser to `https://localhost:8000` (or your server's IP if running remotely/in Docker on another machine).
 2.  **Grant microphone permissions** when prompted.
-3.  Click **"Start"** to begin chatting! Use "Stop" to end and "Reset" to clear the conversation.
-4.  Use the **speaker icon** to toggle TTS (Text-to-Speech) on/off.
-5.  Use the **microphone icon** to toggle STT (Speech-to-Text) on/off.
+3.  Click **"Start"** to begin chatting! Watch the voice activity indicator to see the system status.
+4.  Use "Stop" to end and "Reset" to clear the conversation.
+5.  Use the **speaker icon** to toggle TTS (Text-to-Speech) on/off.
+6.  Use the **microphone icon** to toggle STT (Speech-to-Text) on/off.
 
 ---
 
