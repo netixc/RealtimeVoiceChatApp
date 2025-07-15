@@ -312,34 +312,56 @@ async def process_incoming_data(ws: WebSocket, app: FastAPI, incoming_chunks: as
                     if text:
                         logger.info(f"🖥️💬 Received text input from user: {text}")
                         
-                        # Interrupt any ongoing generation
-                        if app.state.SpeechPipelineManager.running_generation:
-                            app.state.SpeechPipelineManager.running_generation.abortion_started = True
-                        
-                        # Interrupt microphone if active
-                        if not app.state.AudioInputProcessor.interrupted:
-                            logger.info(f"{Colors.apply('🖥️🎙️ ⏸️ Microphone interrupted (text input)').cyan}")
-                            app.state.AudioInputProcessor.interrupted = True
-                            callbacks.interruption_time = time.time()
+                        # Agent Zero's intervention pattern: if generation is running, set as intervention
+                        if app.state.SpeechPipelineManager.running_generation and not app.state.SpeechPipelineManager.running_generation.abortion_started:
+                            logger.info(f"🖥️💬 Setting text as intervention (generation is running)")
+                            app.state.SpeechPipelineManager.intervention = {"text": text, "type": "text"}
                             
-                        # Send final_user_request to client for UI consistency
-                        callbacks.message_queue.put_nowait({
-                            "type": "final_user_request",
-                            "content": text
-                        })
-                        
-                        # Add to history
-                        app.state.SpeechPipelineManager.history.append({
-                            "role": "user",
-                            "content": text
-                        })
-                        
-                        # Trigger LLM generation
-                        app.state.SpeechPipelineManager.prepare_generation(text)
-                        
-                        # Allow TTS synthesis
-                        callbacks.tts_to_client = True
-                        callbacks.synthesis_started = True
+                            # Show intervention in chat UI
+                            logger.info(f"🖥️💬 Showing intervention in chat UI: '{text}'")
+                            callbacks.message_queue.put_nowait({
+                                "type": "final_user_request",
+                                "content": text
+                            })
+                            
+                            # Interrupt microphone if active
+                            if not app.state.AudioInputProcessor.interrupted:
+                                logger.info(f"{Colors.apply('🖥️🎙️ ⏸️ Microphone interrupted (text input)').cyan}")
+                                app.state.AudioInputProcessor.interrupted = True
+                                callbacks.interruption_time = time.time()
+                            
+                            # Don't call prepare_generation here - let the intervention system handle it
+                            # The intervention will be picked up by handle_intervention() in the LLM worker
+                            
+                            # Allow TTS synthesis
+                            callbacks.tts_to_client = True
+                            callbacks.synthesis_started = True
+                        else:
+                            # No active generation, process normally
+                            # Interrupt microphone if active
+                            if not app.state.AudioInputProcessor.interrupted:
+                                logger.info(f"{Colors.apply('🖥️🎙️ ⏸️ Microphone interrupted (text input)').cyan}")
+                                app.state.AudioInputProcessor.interrupted = True
+                                callbacks.interruption_time = time.time()
+                            
+                            # Send final_user_request to client for UI consistency
+                            callbacks.message_queue.put_nowait({
+                                "type": "final_user_request",
+                                "content": text
+                            })
+                            
+                            # Add to history
+                            app.state.SpeechPipelineManager.history.append({
+                                "role": "user",
+                                "content": text
+                            })
+                            
+                            # Trigger LLM generation
+                            app.state.SpeechPipelineManager.prepare_generation(text)
+                            
+                            # Allow TTS synthesis
+                            callbacks.tts_to_client = True
+                            callbacks.synthesis_started = True
 
 
     except asyncio.CancelledError:
@@ -890,6 +912,15 @@ class TranscriptionCallbacks:
                 app.state.SpeechPipelineManager.history.append({"role": "assistant", "content": cleaned_answer})
                 self.final_assistant_answer_sent = True
                 self.final_assistant_answer = cleaned_answer # Store the sent answer
+                
+                # Check if we need to resume paused generation after intervention completes
+                logger.debug(f"🖥️🔍 Resume check: resume_after_intervention={app.state.SpeechPipelineManager.resume_after_intervention}, paused_generation={app.state.SpeechPipelineManager.paused_generation is not None}")
+                if app.state.SpeechPipelineManager.resume_after_intervention and app.state.SpeechPipelineManager.paused_generation:
+                    logger.info(f"🖥️🔄 Intervention complete, resuming paused generation")
+                    app.state.SpeechPipelineManager.resume_after_intervention = False
+                    app.state.SpeechPipelineManager.resume_paused_generation()
+                else:
+                    logger.debug(f"🖥️⏸️ Not resuming - conditions not met")
             else:
                 logger.warning(f"🖥️⚠️ {Colors.YELLOW}Final assistant answer was empty after cleaning.{Colors.RESET}")
                 self.final_assistant_answer_sent = False # Don't mark as sent

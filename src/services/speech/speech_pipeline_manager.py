@@ -27,6 +27,11 @@ except FileNotFoundError:
     system_prompt = "You are a helpful assistant."
 
 
+# Agent Zero's InterventionException
+class InterventionException(Exception):
+    pass
+
+
 
 
 class PipelineRequest:
@@ -93,6 +98,7 @@ class RunningGeneration:
         self.final_answer: str = ""
 
         self.completed: bool = False
+        self.paused_progress: str = ""  # Store progress when paused for intervention
 
 
 class SpeechPipelineManager:
@@ -154,6 +160,11 @@ class SpeechPipelineManager:
         self.history = []
         self.requests_queue = Queue()
         self.running_generation: Optional[RunningGeneration] = None
+        self.intervention: Optional[dict] = None  # Agent Zero's intervention pattern
+        self.paused_generation: Optional[RunningGeneration] = None  # Store paused generation
+        self.resume_after_intervention = False  # Flag to resume paused generation after intervention
+        self.intervention_detected = False  # Flag to detect intervention without exceptions
+        self.intervention_message = None  # Store intervention message for flag-based approach
 
         # --- Threading Events ---
         self.shutdown_event = threading.Event()
@@ -205,6 +216,51 @@ class SpeechPipelineManager:
         """
         return self.running_generation is not None and not self.running_generation.abortion_started
 
+    def handle_intervention(self, progress: str = "", in_generator: bool = False):
+        """Agent Zero's intervention handling pattern - pause and resume"""
+        if self.intervention:
+            msg = self.intervention
+            self.intervention = None  # reset the intervention message
+            
+            # Save progress to history like Agent Zero does
+            if progress.strip():
+                self.history.append({"role": "assistant", "content": progress})
+            
+            # Pause current generation instead of aborting
+            if self.running_generation:
+                logger.info(f"🗣️🔄 Pausing generation {self.running_generation.id} for intervention")
+                self.paused_generation = self.running_generation
+                self.paused_generation.paused_progress = progress  # Save progress
+                self.running_generation = None  # Clear running generation
+                
+            # Add intervention to history
+            self.history.append({"role": "user", "content": msg.get("text", ""), "intervention": True})
+            
+            # Use flag-based approach when called from within generator to avoid RealtimeTTS catching exception
+            if in_generator:
+                self.intervention_detected = True
+                self.intervention_message = msg
+                logger.info(f"🗣️🔄 Intervention detected in generator, setting flag")
+                return True  # Signal that intervention was detected
+            else:
+                raise InterventionException(msg)
+
+    def resume_paused_generation(self):
+        """Resume the paused generation after intervention is complete"""
+        if self.paused_generation:
+            logger.info(f"🗣️▶️ Resuming paused generation {self.paused_generation.id}")
+            
+            # Add paused progress to history if any
+            if hasattr(self.paused_generation, 'paused_progress') and self.paused_generation.paused_progress:
+                self.history.append({"role": "assistant", "content": self.paused_generation.paused_progress})
+            
+            # Continue with the original request
+            original_text = self.paused_generation.text
+            self.paused_generation = None  # Clear paused generation
+            
+            # Start new generation to continue the story
+            self.prepare_generation(original_text)
+
     def _request_processing_worker(self):
         """
         Worker thread target that processes requests from the `requests_queue`.
@@ -238,6 +294,7 @@ class SpeechPipelineManager:
                 logger.debug(f"🗣️🔄 Request Processor: Processing most recent request - {request.action}")
                 
                 if request.action == "prepare":
+                    logger.info(f"🗣️📥 Request Processor: Processing prepare request for: '{request.data[:50]}...'")
                     self.process_prepare_generation(request.data)
                     self.previous_request = request
                 elif request.action == "finish":
@@ -365,6 +422,12 @@ class SpeechPipelineManager:
                     current_gen.quick_answer += chunk
                     if self.no_think:
                         current_gen.quick_answer = self.clean_quick_answer(current_gen.quick_answer)
+                    
+                    # Agent Zero's intervention check - check more frequently
+                    if self.handle_intervention(current_gen.quick_answer, in_generator=True):
+                        # Intervention detected, break from LLM processing
+                        logger.info(f"🗣️🧠🔄 [Gen {gen_id}] LLM Worker: Intervention detected via flag, breaking from LLM processing")
+                        break
 
                     if token_count == 1:
                         logger.info(f"🗣️🧠⏱️ [Gen {gen_id}] LLM Worker: TTFT: {(time.time() - start_time):.4f}s")
@@ -397,6 +460,17 @@ class SpeechPipelineManager:
                         self.on_partial_assistant_text(current_gen.quick_answer)
                     self.llm_answer_ready_event.set() # Signal TTS quick worker
 
+            except InterventionException as e:
+                # Agent Zero pattern: Handle intervention (for calls outside generator)
+                logger.info(f"🗣️🧠🔄 [Gen {gen_id}] LLM Worker: Intervention detected: {e.args[0]}")
+                # Process the intervention by restarting with new message
+                intervention_msg = e.args[0]
+                
+                # Mark that we need to resume after intervention
+                self.resume_after_intervention = True
+                
+                # Process the intervention
+                self.prepare_generation(intervention_msg.get("text", ""))
             except Exception as e:
                 logger.exception(f"🗣️🧠💥 [Gen {gen_id}] LLM Worker: Error during generation: {e}")
                 current_gen.llm_aborted = True # Mark as aborted on error
@@ -417,6 +491,22 @@ class SpeechPipelineManager:
 
                 current_gen.llm_finished = True
                 current_gen.llm_finished_event.set()
+
+            # Check for intervention after LLM processing (outside try-except-finally)
+            if self.intervention_detected:
+                # Agent Zero pattern: Handle intervention
+                logger.info(f"🗣️🧠🔄 [Gen {gen_id}] LLM Worker: Intervention detected via flag")
+                intervention_msg = self.intervention_message
+                
+                # Reset intervention flags
+                self.intervention_detected = False
+                self.intervention_message = None
+                
+                # Mark that we need to resume after intervention
+                self.resume_after_intervention = True
+                
+                # Process the intervention
+                self.prepare_generation(intervention_msg.get("text", ""))
 
     def check_abort(self, txt: str, wait_for_finish: bool = True, abort_reason: str = "unknown") -> bool:
         """
@@ -552,6 +642,9 @@ class SpeechPipelineManager:
             gen_id = current_gen.id
             logger.info(f"🗣️👄🔄 [Gen {gen_id}] Quick TTS Worker: Processing TTS for quick answer...")
 
+            # Agent Zero's intervention check before TTS quick processing
+            self.handle_intervention(current_gen.quick_answer)
+
             # Set state for active generation
             self.tts_quick_generation_active = True
             self.stop_tts_quick_finished_event.clear()
@@ -599,6 +692,20 @@ class SpeechPipelineManager:
                         logger.info(f"🗣️👄✅ [Gen {gen_id}] Quick TTS Worker: Synthesis completed successfully.")
 
 
+            except InterventionException as e:
+                # Agent Zero pattern: Handle intervention in TTS quick worker
+                logger.info(f"🗣️👄🔄 [Gen {gen_id}] Quick TTS Worker: Intervention detected: {e.args[0]}")
+                # Process the intervention by restarting with new message
+                intervention_msg = e.args[0]
+                
+                # Mark that we need to resume after intervention
+                self.resume_after_intervention = True
+                
+                # Process the intervention
+                self.prepare_generation(intervention_msg.get("text", ""))
+                
+                # Mark as aborted since we're handling intervention
+                current_gen.audio_quick_aborted = True
             except Exception as e:
                 logger.exception(f"🗣️👄💥 [Gen {gen_id}] Quick TTS Worker: Error during synthesis: {e}")
                 current_gen.audio_quick_aborted = True # Mark as aborted on error
@@ -663,6 +770,23 @@ class SpeechPipelineManager:
             # --- Conditions met, start final TTS ---
             logger.info(f"🗣️👄🔄 [Gen {gen_id}] Final TTS Worker: Processing final TTS...")
 
+            try:
+                # Agent Zero's intervention check before TTS final processing
+                self.handle_intervention(current_gen.quick_answer + current_gen.final_answer)
+            except InterventionException as e:
+                # Intervention detected at start of final TTS - queue it for processing
+                logger.info(f"🗣️👄🔄 [Gen {gen_id}] Final TTS Worker: Intervention detected before final TTS: {e.args[0]}")
+                intervention_msg = e.args[0]
+                
+                # Mark that we need to resume after intervention
+                self.resume_after_intervention = True
+                
+                # Queue the intervention for processing by main request worker
+                intervention_text = intervention_msg.get("text", "")
+                logger.info(f"🗣️👄📥 [Gen {gen_id}] Final TTS Worker: Queueing intervention request (pre-TTS): '{intervention_text}'")
+                self.requests_queue.put(PipelineRequest("prepare", intervention_text))
+                continue
+
             def get_generator():
                 """Yields remaining text chunks for final TTS synthesis."""
                 # Yield overhang first
@@ -687,6 +811,12 @@ class SpeechPipelineManager:
                              logger.info(f"🗣️👄❌ [Gen {gen_id}] Final TTS Gen: Stop request detected during LLM iteration.")
                              current_gen.audio_final_aborted = True
                              break # Stop yielding
+
+                         # Agent Zero's intervention check during TTS final generation
+                         if self.handle_intervention(current_gen.quick_answer + current_gen.final_answer, in_generator=True):
+                             # Intervention detected, break from generator
+                             logger.info(f"🗣️👄🔄 [Gen {gen_id}] Final TTS Gen: Intervention detected via flag, breaking from generator")
+                             break
 
                          preprocessed_chunk = self.preprocess_chunk(chunk)
                          current_gen.final_answer += preprocessed_chunk
@@ -717,13 +847,30 @@ class SpeechPipelineManager:
                     self.stop_tts_final_request_event # Pass the event for the synthesizer to check
                 )
 
-                if not completed:
+                # Check for intervention after generator finishes
+                if self.intervention_detected:
+                    # Agent Zero pattern: Queue intervention for processing by main request worker
+                    logger.info(f"🗣️👄🔄 [Gen {gen_id}] Final TTS Worker: Intervention detected via flag, queuing for processing")
+                    current_gen.audio_final_aborted = True
+                    intervention_msg = self.intervention_message
+                    
+                    # Reset intervention flags
+                    self.intervention_detected = False
+                    self.intervention_message = None
+                    
+                    # Mark that we need to resume after intervention
+                    self.resume_after_intervention = True
+                    
+                    # Queue the intervention for processing by main request worker
+                    intervention_text = intervention_msg.get("text", "")
+                    logger.info(f"🗣️👄📥 [Gen {gen_id}] Final TTS Worker: Queueing intervention request: '{intervention_text}'")
+                    self.requests_queue.put(PipelineRequest("prepare", intervention_text))
+                    
+                elif not completed:
                      logger.info(f"🗣️👄❌ [Gen {gen_id}] Final TTS Worker: Synthesis stopped via event.")
                      current_gen.audio_final_aborted = True
                 else:
                     logger.info(f"🗣️👄✅ [Gen {gen_id}] Final TTS Worker: Synthesis completed successfully.")
-
-
             except Exception as e:
                 logger.exception(f"🗣️👄💥 [Gen {gen_id}] Final TTS Worker: Error during synthesis: {e}")
                 current_gen.audio_final_aborted = True # Mark as aborted on error
@@ -745,6 +892,9 @@ class SpeechPipelineManager:
                     current_gen.tts_final_finished_event.set() # Signal natural completion
 
                 current_gen.audio_final_finished = True # Mark final audio phase as done (even if aborted)
+                current_gen.completed = True # Mark generation as completed
+                
+                # Don't resume here - let the main request processor handle it after intervention completes
 
 
     # --- Processing Methods ---
